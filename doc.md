@@ -1,7 +1,7 @@
 # HTML5 Speedtest
 
 > by Federico Dossena  
-> Version 4.3.1, August 25 2017  
+> Version 4.5.5, April 25, 2018
 > [https://github.com/adolfintel/speedtest/](https://github.com/adolfintel/speedtest/)
 
 
@@ -41,14 +41,47 @@ Later we'll see how to use the test without PHP, and how to configure the teleme
 
 __Important:__ keep all the files together; all paths are relative to the js file
 
+## Basic usage
+You can start using this speedtest on your site without any special knowledge.  
+Start by copying one of the included examples. Here's a description for each of them:
+* `example-basic.html`: This example shows the most basic configuration possible. Everything runs with the default settings, in a very simple page where the output is shown
+* `example-pretty.html`: This is a more sophisticated example, with a nicer layout and a start/stop button. __This is the best starting point for most users__
+* `example-progressBar.html`: A modified version of `example-pretty.html` with a progress indicator
+* `example-customSettings.html`: A modified version of `example-pretty.html` showing how the test can be started with custom parameters
+* `example-customSettings2.html`: A modified version of `example-pretty.html` showing how to make a custom test with only download and upload
+* `example-gauges.html`: The most sophisticated example, with the same functions as `example-pretty.html` but also gauges and progress indicators for each test. This is the nicest example included, and also a good starting point, but drawing the gauges may slow down the test on slow devices like a Raspberry Pi
+* `example-chart.html`: The old example5.html, showing how to use the test with the Chart.js library
+* `example-telemetry.html`: A modified version of `example-pretty.html` with basic telemetry turned on. See the section on Telemetry for details
 
-## Usage
-You can modify one of the examples or start from scratch. If you are just editing one of the example, skip to the "test parameters" section.
+### Customizing your example
+The included examples are good starting places if you want to have a simple speedtest on your site.  
+Once you've tested everything and you're sure that everything works, edit it and add some custom stuff like your logo or new colors.  
+If you want to change the test parameters, for instance to make the download test shorter, you can do so in every example:  
+Look for the line that contains `postMessage('start `  
+This is where custom parameters can be passed to the test as a JSON string. You can write the string manually or use ``JSON.stringify`` to do that for you.
+Here's an example:
+```js
+w.postMessage('start {"time_dl":"10"}');
+```
+This starts the test with default settings, but sets the download test to last only 10 seconds.  
+Here's a cleaner version using ``JSON.stringify``:
+```js
+var params={
+	time_dl:10
+}
+w.postMessage('start '+JSON.stringify(params))
+```
+Notice that there is a space after the word `start`, don't forget that!  
+
+For a list of all test settings, look below, under Test parameters and Advanced test parameters. __Do not change anything if you don't know what you're doing.__
+
+## Advanced usage
+If you don't want to start from one of the examples, here's how to use the worker. Examples are still good for reference, so keep them handy.
 
 To run the test, you need to do 3 things:
 
 * Create the worker
-* Write some code that handles the responses coming from the worker
+* Write some code that handles the data coming from the worker
 * Start the test
 
 ### Creating the worker
@@ -78,6 +111,9 @@ w.onmessage = function (event) {
   var pingStatus = data[3]
   var jitterStatus = data[5]
   var clientIp = data[4]
+  var dlProgress = data[6]
+  var ulProgress = data[7]
+  var pingProgress = data[8]
   if (testState >= 4) {
     clearInterval(timer) // test is finished or aborted
   }
@@ -89,9 +125,10 @@ w.onmessage = function (event) {
 The response from the worker is composed of values separated by `;` (semicolon) in this
 format:
 
-`testState;dlStatus;ulStatus;pingStatus;clientIp;jitterStatus`
+`testState;dlStatus;ulStatus;pingStatus;clientIp;jitterStatus;dlProgress;ulProgress;pingProgress`
 
-* __testState__ is an integer 0-5
+* __testState__ is an integer between -1 and 5
+    * `-1` = Test not started yet
     * `0` = Test starting
     * `1` = Download test in progress
     * `2` = Ping + Jitter test in progress
@@ -117,6 +154,11 @@ format:
     * Empty string (not started or aborted)
     * Estimated jitter in milliseconds as a number with 2 decimals (lower = stable connection)
     * The string "Fail" (test failed)
+* __dlProgress__: the progress of the download test as a number between 0 and 1
+* __ulProgress__: the progress of the upload test as a number between 0 and 1
+* __pingProgress__: the progress of the ping+jitter test as a number between 0 and 1
+
+Note: clientIp appears before jitterStatus. This is not a mistake, it's to keep the js file compatible with older pages from before the jitter test was introduced.
 
 ### Starting the test
 To start the test with the default settings, which is usually the best choice, send the start command to the worker:
@@ -129,6 +171,15 @@ If you want, you can change these settings and pass them to the worker as JSON w
 
 ```js
 w.postMessage('start {"param1": "value1", "param2": "value2", ...}')
+```
+or this:
+```js
+var params{
+	param1:value1,
+	param2:value2,
+	...
+}
+w.postMessage('start '+JSON.stringify(params))
 ```
 
 #### Test parameters
@@ -143,28 +194,40 @@ w.postMessage('start {"param1": "value1", "param2": "value2", ...}')
     * Recommended: `>=20`
 * __url_dl__: path to garbage.php or a large file to use for the download test.
     * Default: `garbage.php`
-    * The string "-1" disables the test
     * __Important:__ path is relative to js file
 * __url_ul__: path to an empty file or empty.php to use for the upload test
     * Default: `empty.php`
-    * The string "-1" disables the test
     * __Important:__ path is relative to js file
 * __url_ping__: path to an empty file or empty.php to use for the ping test
     * Default: `empty.php`
-    * The string "-1" disables the test
     * __Important:__ path is relative to js file
 * __url_getIp__: path to getIP.php or replacement
     * Default: `getIP.php`
-    * The string "-1" disables the test
     * __Important:__ path is relative to js file
 
 #### Advanced test parameters
+* __test_order__: the order in which tests will be performed. Each character represents an operation:
+    * `I`: get IP
+    * `D`: download test
+    * `U`: upload test
+    * `P`: ping + jitter test
+    * `_`: delay 1 second
+    * Default test order: `IP_D_U`
+    * __Important:__ Tests can only be run once
+    * __Important:__ On Firefox, it is better to run the upload test last
+* __getIp_ispInfo__: if true, the server will try to get ISP info and pass it along with the IP address. This will add `isp=true` to the request to `url_getIp`. getIP.php accomplishes this using ipinfo.io
+    * Default: `true`
+* __getIp_ispInfo_distance__: if true, the server will try to get an estimate of the distance from the client to the speedtest server. This will add a `distance` argument to the request to `url_getIp`. `__getIp_ispInfo__` must be enabled in order for this to work. getIP.php accomplishes this using ipinfo.io
+    * `km`: estimate distance in kilometers
+    * `mi`: estimate distance in miles
+    * not set: do not measure distance
+    * Default: `km`
 * __enable_quirks__: enables browser-specific optimizations. These optimizations override some of the default settings. They do not override settings that are explicitly set.
     * Default: `true`
 * __garbagePhp_chunkSize__: size of chunks sent by garbage.php in megabytes
     * Default: `20`
     * Recommended: `>=10`
-    * Default override: 5 on Safari if enable_quirks is true
+    * Maximum: `100`
 * __xhr_dlMultistream__: how many streams should be opened for the download test
     * Default: `10`
     * Recommended: `>=3`
@@ -174,6 +237,13 @@ w.postMessage('start {"param1": "value1", "param2": "value2", ...}')
     * Default: `3`
     * Recommended: `>=1`
     * Default override: 1 on Firefox if enable_quirks is true
+* __xhr_ul_blob_megabytes__: size in megabytes of the blobs sent during the upload test
+	* Default: `20`
+	* Default override: 4 on Chromium-based mobile browsers (limitation introduced around version 65). This will be forced
+	* Default override: IE11 and Edge currently use a different method for the upload test. This parameter is ignored
+* __xhr_multistreamDelay__: how long should the multiple streams be delayed (in ms)
+    * Default: `300`
+    * Recommended: `>=100`, `<=700`
 * __xhr_ignoreErrors__: how to react to errors in download/upload streams and the ping test
     * `0`: Fail test on error (behaviour of previous versions of this test)
     * `1`: Restart a stream/ping when it fails
@@ -186,13 +256,19 @@ w.postMessage('start {"param1": "value1", "param2": "value2", ...}')
 * __time_ulGraceTime__: How long to wait (in seconds) before actually measuring the upload speed. This is a good idea because we want to wait for the buffers to be full (avoids the peak at the beginning of the test)
     * Default: `3`
     * Recommended: `>=1`
+* __ping_allowPerformanceApi__: toggles use of Performance API to improve accuracy of Ping/Jitter test on browsers that support it.
+	* Default: `true`
+* __useMebibits__: use mebibits/s instead of megabits/s for the speeds
+	* Default: `false`
 * __overheadCompensationFactor__: compensation for HTTP and network overhead. Default value assumes typical MTUs used over the Internet. You might want to change this if you're using this in your internal network with different MTUs, or if you're using IPv6 instead of IPv4.
-    * Default: `1.13359567567567567568` (1048576/925000) assumes HTTP+TCP+IPv4+ETH with typical MTUs used over the Internet
-    * `1.0513`: HTTP+TCP+IPv6+ETH, over the Internet (empirically tested, not calculated)
+    * Default: `1.06` probably a decent estimate for all overhead. This was measured empirically by comparing the measured speed and the speed reported by my the network adapter.
+    * `1048576/925000`: old default value. This is probably too high.
+	* `1.0513`: HTTP+TCP+IPv6+ETH, over the Internet (empirically tested, not calculated)
     * `1.0369`: Alternative value for HTTP+TCP+IPv4+ETH, over the Internet (empirically tested, not calculated)
-    * `1460 / 1514`: TCP+IPv4+ETH, ignoring HTTP overhead
-    * `1440 / 1514`: TCP+IPv6+ETH, ignoring HTTP overhead
-    * `1`: ignore overheads. This measures the speed at which you actually download and upload files
+	* `1.081`: Yet another alternative value for over the Internet (empirically tested, not calculated)
+    * `1514 / 1460`: TCP+IPv4+ETH, ignoring HTTP overhead
+    * `1514 / 1440`: TCP+IPv6+ETH, ignoring HTTP overhead
+    * `1`: ignore overheads. This measures the speed at which you actually download and upload files rather than the raw connection speed
 
 ### Aborting the test prematurely
 The test can be aborted at any time by sending an abort command to the worker:
@@ -205,22 +281,12 @@ This will terminate all network activity and stop the worker.
 
 __Important:__ do not simply kill the worker while it's running, as it may leave pending XHR requests!
 
-## Troubleshooting
-These are the most common issues reported by users, and how to fix them
+### Important notice on backwards compatibility
+__Do NOT link the js file from github or fdossena.com directly into your html file.  __
 
-#### Download test gives very low result
-Are garbage.php and empty.php (or your replacements) reachable?  
-Press F12, select network and start the test. Do you see errors? (cancelled requests are not errors)  
-If a small download starts, open it in a text editor. Does it say it's missing openssl_random_pseudo_bytes()? In this case, install OpenSSL (this is usually included when you install Apache and PHP on most distros).
-
-#### Upload test is inaccurate, and I see lag spikes
-Check your server's maximum POST size, make sure it's at least 20Mbytes, possibly more
-
-#### All tests are wrong, give extremely high results, browser lags/crashes, ...
-You're running the test on localhost, therefore it is trying to measure the speed of your loopback interface. The test is meant to be run over an Internet connection, from a different machine.
-
-#### Ping test shows double the actual ping
-Make sure your server is sending the ```Connection:keep-alive``` header
+A lot of web developers think that referring to the latest version of a library in their project is a good thing. It is not.  
+Things may change and I don't want to break your project, so do yourself a favor, and keep all files on your server.  
+You have been warned.
 
 ## Using the test without PHP
 If your server does not support PHP, or you're using something newer like Node.js, you can still use this test by replacing `garbage.php`, `empty.php` and `getIP.php` with equivalents.
@@ -240,7 +306,8 @@ A symlink to `/dev/urandom` is also ok.
 Your replacement must simply respond with a HTTP code 200 and send nothing else. You may want to send additional headers to disable caching. The test assumes that Connection:keep-alive is sent by the server.
 
 #### Replacement for `getIP.php`
-Your replacement must simply respond with the client's IP as plaintext. Nothing fancy.
+Your replacement must simply respond with the client's IP as plaintext. Nothing fancy.  
+If you want, you can also accept the `isp=true` parameter and also include the ISP info.
 
 #### JS
 You need to start the test with your replacements like this:
@@ -249,26 +316,48 @@ You need to start the test with your replacements like this:
 w.postMessage('start {"url_dl": "newGarbageURL", "url_ul": "newEmptyURL", "url_ping": "newEmptyURL", "url_getIp": "newIpURL"}')
 ```
 ## Telemetry
-Telemetry currently requires PHP and MySQL.  
+Telemetry currently requires PHP and either MySQL, PostgreSQL or SQLite. Alternatively, it is possible to save to a CSV file.
 To set up the telemetry, we need to do 4 things:
-* copy `telemetry.php`
-* edit `telemetry.php` to add your database access credentials
+* copy `telemetry.php` and `telemetry_settings.php`
+* edit `telemetry_settings.php` to add your database or CSV settings
 * create the database
 * enable telemetry
 
 ### Creating the database
-At the moment, only MySQL is supported.  
-Log into your database using phpMyAdmin or a similar software and import `telemetry.sql` into an empty database.  
+This step is only for MySQL and PostgreSQL.  
+Log into your database using phpMyAdmin or a similar software and import the appropriate sql file into an empty database. For MySQL databases use `telemetry_mysql.sql` and for PostgreSQL databases use `telemetry_postgesql.sql`.
 If you see a table called `speedtest_users`, empty, you did it right.
 
 ### Configuring `telemetry.php`
-Open telemetry.php with notepad or a similar text editor, and insert your database access credentials
+Open telemetry_settings.php with notepad or a similar text editor.
+Set your preferred database, ``$db_type="mysql";``, ``$db_type="sqlite";``, ``$db_type="postgresql";`` or or ``$db_type="csv";``
+If you choose to use Sqlite3, you must set the path to your database file:
+```php
+$Sqlite_db_file = "../telemetry.sql";
 ```
+
+If you choose to use MySQL, you must also add your database credentials:
+```php
 $MySql_username="USERNAME"; //your database username
 $MySql_password="PASSWORD"; //your database password
 $MySql_hostname="DB_HOSTNAME"; //database address, usually localhost\
-$MySql_databasename="DB_NAME"; //the name of the database where you loaded telemetry.sql
+$MySql_databasename="DB_NAME"; //the name of the database where you loaded telemetry_mysql.sql
 ```
+
+If you choose to use PostgreSQL, you must also add your database credentials:
+```php
+$PostgreSql_username="USERNAME"; //your database username
+$PostgreSql_password="PASSWORD"; //your database password
+$PostgreSql_hostname="DB_HOSTNAME"; //database address, usually localhost
+$PostgreSql_databasename="DB_NAME"; //the name of the database where you loaded telemetry_postgresql.sql
+```
+
+If you choose to use a CSV file, you must set the Csv_File and timezone variables.
+```php
+$Csv_File="myReportFile.csv";
+$timezone='Europe/Paris';
+```
+__Note__: CSV currently only supports basic telemetry, the log will not be saved
 
 ### Enabling telemetry
 Edit your test page; where you start the worker, you need to specify the `telemetry_level`.  
@@ -278,33 +367,61 @@ There are 3 levels:
 * `full`: same as above, but also collects a log (10-150 Kb each, not recommended)
 
 Example:
-```
+```js
 w.postMessage('start {"telemetry_level":"basic"}')
 ```
 
-Also, see example8_telemetry.html
+Also, see example-telemetry.html
 
-### See the results
+### Seeing the results
 At the moment there is no front-end to see the telemetry data; you can connect to the database and see the collected results in the `speedtest_users` table.
 
+## Troubleshooting
+These are the most common issues reported by users, and how to fix them. If you still need help, contact me at [info@fdossena.com](mailto:info@fdossena.com).
+
+#### Download test gives very low result
+Are garbage.php and empty.php (or your replacements) reachable?  
+Press F12, select network and start the test. Do you see errors? (cancelled requests are not errors)  
+If a small download starts, open it in a text editor. Does it say it's missing openssl_random_pseudo_bytes()? In this case, install OpenSSL (this is usually included when you install Apache and PHP on most distros).
+
+#### Upload test is inaccurate, and/or I see lag spikes
+Check your server's maximum POST size, make sure it's at least 20Mbytes, possibly more
+
+#### Download and/or upload results are slightly too optimistic
+The test was fine tuned to run over a typical IPv4 internet connection. If you're using it under different conditions, see the ``overheadCompensationFactor`` parameter.
+
+#### All tests are wrong, give extremely high results, browser lags/crashes, ...
+You're running the test on localhost, therefore it is trying to measure the speed of your loopback interface. The test is meant to be run over an Internet connection, from a different machine.
+
+#### Ping test shows double the actual ping
+Make sure your server is sending the ```Connection:keep-alive``` header
+
+#### The server is behind a load balancer, proxy, etc. and I get the wrong IP address
+Edit getIP.php and replace lines 5-13 with what is more appropriate in your scenario.  
+Example: ```$ip = $_SERVER['HTTP_X_FORWARDED_FOR'];```
+
 ## Known bugs and limitations
-* The ping/jitter test is measured by seeing how long it takes for an empty XHR to complete. It is not an acutal ICMP ping
-* __IE11, Edge 15 (15 only):__ the upload test is not precise, especially on very fast connections
-* __IE11:__ the upload test may not work over HTTPS
-* __Firefox:__ on some Linux systems with hardware acceleration turned off, the page rendering makes the browser lag, reducing the accuracy of the ping/jitter test
+### General
+* The ping/jitter test is measured by seeing how long it takes for an empty XHR to complete. It is not an acutal ICMP ping. Different browsers may also show different results, especially on very fast connections on slow devices.
+### IE-Specific
+* The upload test is not precise on very fast connections with high latency (will probably be fixed by Edge 17)
+* On IE11, a same origin policy error is erroneously triggered under unknown conditions. Seems to be related to running the test from unusual URLs like a top level domain (for instance http://abc/speedtest). These are bugs in IE11's implementation of the same origin policy, not in the speedtest itself.
+* On IE11, under unknown circumstances, on some systems the test can only be run once, after which speedtest_worker.js will not be loaded by IE until the browser is restarted. This is a rare bug in IE11.
+### Firefox-Specific
+* On some Linux systems with hardware acceleration turned off, the page rendering makes the browser lag, reducing the accuracy of the ping/jitter test, and potentially even the download and upload tests on very fast connections.
 
 ## Making changes
 Since this is an open source project, you can modify it.
 
 To make changes to the speedtest itself, edit `speedtest_worker.js`
 
-To create the minified version, use UglifyJS like this:
+To create the minified version, use [UglifyJS](https://github.com/mishoo/UglifyJS2) like this:
 
 ```
-uglifyjs -c --screw-ie8 speedtest_worker.js > speedtest_worker.min.js
+uglifyjs -c -o speedtest_worker.min.js -- speedtest_worker.js
 ```
 
-Pull requests are much appreciated. If you don't use github (or git), simply contact me at dosse91@paranoici.org.
+Pull requests are very appreciated. If you don't use github (or git), simply contact me at [info@fdossena.com](mailto:info@fdossena.com).
 
 __Important:__ please add your name to modified versions to distinguish them from the main project.
 
@@ -314,3 +431,5 @@ This software is under the GNU LGPL license, Version 3 or newer.
 
 To put it short: you are free to use, study, modify, and redistribute this software and modified versions of it, for free or for money.
 You can also use it in proprietary software but all changes to this software must remain under the same GNU LGPL license.
+
+Contact me at [info@fdossena.com](mailto:info@fdossena.com) for other licensing models.
