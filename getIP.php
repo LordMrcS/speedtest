@@ -60,10 +60,10 @@ if (strpos($ip, '169.254.') === 0) { // IPv4 link-local
  * @return float [km]
  */
 function distance($latitudeFrom, $longitudeFrom, $latitudeTo, $longitudeTo) {
-    $rad = M_PI / 180;
-    $theta = $longitudeFrom - $longitudeTo;
-    $dist = sin($latitudeFrom * $rad) * sin($latitudeTo * $rad) + cos($latitudeFrom * $rad) * cos($latitudeTo * $rad) * cos($theta * $rad);
-    return acos($dist) / $rad * 60 * 1.853;
+    //$rad = M_PI / 180;
+    //$theta = $longitudeFrom - $longitudeTo;
+    //$dist = sin($latitudeFrom * $rad) * sin($latitudeTo * $rad) + cos($latitudeFrom * $rad) * cos($latitudeTo * $rad) * cos($theta * $rad);
+    return 0;//return acos($dist) / $rad * 60 * 1.853;
 }
 function getIpInfoTokenString(){
 	$apikeyFile="getIP_ipInfo_apikey.php";
