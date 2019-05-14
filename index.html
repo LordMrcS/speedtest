@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, user-scalable=no" />
-<title>Teste de Velocidade do PoP-MA</title>
+<title>HTML5 Speedtest</title>
 <style type="text/css">
 	html,body{
 		border:none; padding:0; margin:0;
@@ -16,9 +16,6 @@
 	}
 	h1{
 		color:#404040;
-	}
-	.cinza{
-		color:#dddfdf;
 	}
 	#startStopBtn{
 		display:inline-block;
@@ -43,14 +40,31 @@
 		color:#FFFFFF;
 	}
 	#startStopBtn:before{
-		content:"Iniciar";
+		content:"Start";
 	}
 	#startStopBtn.running:before{
-		content:"Cancelar";
+		content:"Abort";
 	}
 	#test{
 		margin-top:2em;
 		margin-bottom:12em;
+	}
+	#progressBar{
+		width:90%;
+		height:0.3em;
+		background-color:#EEEEEE;
+		position:relative;
+		display:block;
+		margin:0 auto;
+		margin-bottom:2em;
+	}
+	#progress{
+		position:absolute;
+		top:0; left:0;
+		height:100%;
+		width:0%;
+		transition: width 2s;
+		background-color:#90BBFF;
 	}
 	div.testArea{
 		display:inline-block;
@@ -103,23 +117,6 @@
 			display:block;
 			margin: 0 auto;
 		}
-	}
-	#progressBar{
-		width:90%;
-		height:0.3em;
-		background-color:#EEEEEE;
-		position:relative;
-		display:block;
-		margin:0 auto;
-		margin-bottom:2em;
-	}
-	#progress{
-		position:absolute;
-		top:0; left:0;
-		height:100%;
-		width:0%;
-		transition: width 2s;
-		background-color:#90BBFF;
 	}
 
 </style>
@@ -183,32 +180,32 @@ function startStop(){
 		w.postMessage('start'); //Add optional parameters as a JSON object to this command
 		I("startStopBtn").className="running";
 		w.onmessage=function(e){
-			data=e.data.split(';');
-			var status=Number(data[0]);
+			data=JSON.parse(e.data);
+			var status=data.testState;
 			if(status>=4){
 				//test completed
 				I("startStopBtn").className="";
 				w=null;
 				updateUI(true);
 			}
-        	        var prog=(Number(data[6])*2+Number(data[7])*2+Number(data[8]))/5;
-		        I("progress").style.width=(100*prog)+"%";
 		};
 	}
 }
 //this function reads the data sent back by the worker and updates the UI
 function updateUI(forced){
 	if(!forced&&(!data||!w)) return;
-	var status=Number(data[0]);
-	I("ip").textContent=data[4];
-	I("dlText").textContent=(status==1&&data[1]==0)?"...":data[1];
-	drawMeter(I("dlMeter"),mbpsToAmount(Number(data[1]*(status==1?oscillate():1))),meterBk,dlColor,Number(data[6]),progColor);
-	I("ulText").textContent=(status==3&&data[2]==0)?"...":data[2];
-	drawMeter(I("ulMeter"),mbpsToAmount(Number(data[2]*(status==3?oscillate():1))),meterBk,ulColor,Number(data[7]),progColor);
-	I("pingText").textContent=data[3];
-	drawMeter(I("pingMeter"),msToAmount(Number(data[3]*(status==2?oscillate():1))),meterBk,pingColor,Number(data[8]),progColor);
-	I("jitText").textContent=data[5];
-	drawMeter(I("jitMeter"),msToAmount(Number(data[5]*(status==2?oscillate():1))),meterBk,jitColor,Number(data[8]),progColor);
+	var status=data.testState;
+	I("ip").textContent=data.clientIp;
+	I("dlText").textContent=(status==1&&data.dlStatus==0)?"...":data.dlStatus;
+	drawMeter(I("dlMeter"),mbpsToAmount(Number(data.dlStatus*(status==1?oscillate():1))),meterBk,dlColor,Number(data.dlProgress),progColor);
+	I("ulText").textContent=(status==3&&data.ulStatus==0)?"...":data.ulStatus;
+	drawMeter(I("ulMeter"),mbpsToAmount(Number(data.ulStatus*(status==3?oscillate():1))),meterBk,ulColor,Number(data.ulProgress),progColor);
+	I("pingText").textContent=data.pingStatus;
+	drawMeter(I("pingMeter"),msToAmount(Number(data.pingStatus*(status==2?oscillate():1))),meterBk,pingColor,Number(data.pingProgress),progColor);
+	I("jitText").textContent=data.jitterStatus;
+	drawMeter(I("jitMeter"),msToAmount(Number(data.jitterStatus*(status==2?oscillate():1))),meterBk,jitColor,Number(data.pingProgress),progColor);
+	var prog=(Number(data.dlProgress)*2+Number(data.ulProgress)*2+Number(data.pingProgress))/5;
+	I("progress").style.width=(100*prog)+"%";
 }
 function oscillate(){
 	return 1+0.02*Math.sin(Date.now()/100);
@@ -241,7 +238,7 @@ function initUI(){
 </script>
 </head>
 <body>
-<h1>Teste de Velocidade do PoP-MA</h1>
+<h1>HTML5 Speedtest</h1>
 <div id="startStopBtn" onclick="startStop()"></div>
 <div id="test">
 	<div id="progressBar"><div id="progress"></div></div>
@@ -274,7 +271,7 @@ function initUI(){
 		</div>
 	</div>
 	<div id="ipArea">
-		Endereço IP: <span id="ip"></span>
+		IP Address: <span id="ip"></span>
 	</div>
 </div>
 <a href="https://github.com/LordMrcS/speedtest/" target="_blank" class="cinza">Código fonte</a>
