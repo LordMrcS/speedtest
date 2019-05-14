@@ -1,7 +1,7 @@
 # HTML5 Speedtest
 
 > by Federico Dossena  
-> Version 4.5.5, April 25, 2018
+> Version 4.7.2
 > [https://github.com/adolfintel/speedtest/](https://github.com/adolfintel/speedtest/)
 
 
@@ -11,7 +11,7 @@ This test measures download speed, upload speed, ping and jitter.
 
 First of all, the requirements to run this test:
 
-* The browser have to support XHR Level 2 and Web Workers and Javascript must be enabled.
+* The browser must support XHR Level 2 and Web Workers and Javascript must be enabled.
     * Internet Explorer 11
     * Microsoft Edge 12+
     * Mozilla Firefox 12+
@@ -19,8 +19,8 @@ First of all, the requirements to run this test:
     * Apple Safari 7.1+
     * Opera 18+
 * Client side, the test can use up to 500 megabytes of RAM
-* Server side, you'll need a fast connection (at least 100 Mbps recommended), and the web server must accept large POST requests (up to 20 megabytes).
-  Apache2 and PHP are recommended, but not mandatory.
+* Server side, you'll need a fast connection (at least 100 Mbps recommended), and the web server must accept large POST requests (up to 20 megabytes).  
+  The recommended setup is: GNU/Linux, Apache2, PHP, MySQL database (if you want to use telemetry).
 
 If this looks good, let's proceed and see how to use the test.
 
@@ -37,9 +37,13 @@ To install the test on your server, upload the following files:
 * `empty.php`
 * one of the examples
 
-Later we'll see how to use the test without PHP, and how to configure the telemetry if you want to use it.
+Later we'll see how to use the test without PHP, and how to configure the telemetry and result sharing if you want to use that.
 
 __Important:__ keep all the files together; all paths are relative to the js file
+
+__Important:__ If you expect to serve more than ~500 tests per day, you will need to sign up to [ipinfo.io](https://ipinfo.io) and edit `getIP_ipInfo_apikey.php` to set your access token. IpInfo.io has kindly offered free access to their APIs for users of this project; if you're interested, contact me at [info@fdossena.com](mailto:info@fdossena.com) and provide a description of what you intend to do with the project, and you'll get the API key. This is only required if you intend to use ISP and distance detection.
+
+__Important:__ Make sure PHP is allowed to write to the directory where you're installing the speedtest because getIP.php needs to create a cache file to improve performance.
 
 ## Basic usage
 You can start using this speedtest on your site without any special knowledge.  
@@ -51,7 +55,10 @@ Start by copying one of the included examples. Here's a description for each of 
 * `example-customSettings2.html`: A modified version of `example-pretty.html` showing how to make a custom test with only download and upload
 * `example-gauges.html`: The most sophisticated example, with the same functions as `example-pretty.html` but also gauges and progress indicators for each test. This is the nicest example included, and also a good starting point, but drawing the gauges may slow down the test on slow devices like a Raspberry Pi
 * `example-chart.html`: The old example5.html, showing how to use the test with the Chart.js library
+
+These 2 examples require some additional server configuration, discussed in the Telemetry section:
 * `example-telemetry.html`: A modified version of `example-pretty.html` with basic telemetry turned on. See the section on Telemetry for details
+* `example-telemetry-resultsSharing.html`: A modified version of `example-telemetry.html` with results sharing. This is the most complete and most complex example, showing off all of the speedtest features
 
 ### Customizing your example
 The included examples are good starting places if you want to have a simple speedtest on your site.  
@@ -104,17 +111,8 @@ we'll see the details of the format of the response.
 
 ```js
 w.onmessage = function (event) {
-  var data = event.data.split(';')
-  var testState = data[0]
-  var dlStatus = data[1]
-  var ulStatus = data[2]
-  var pingStatus = data[3]
-  var jitterStatus = data[5]
-  var clientIp = data[4]
-  var dlProgress = data[6]
-  var ulProgress = data[7]
-  var pingProgress = data[8]
-  if (testState >= 4) {
+  var data = JSON.parse(event.data);
+  if (data.testState >= 4) {
     clearInterval(timer) // test is finished or aborted
   }
   // .. update your page here ..
@@ -122,12 +120,9 @@ w.onmessage = function (event) {
 ```
 
 #### Response format
-The response from the worker is composed of values separated by `;` (semicolon) in this
-format:
+The response from the worker is a JSON string containing these entries:
 
-`testState;dlStatus;ulStatus;pingStatus;clientIp;jitterStatus;dlProgress;ulProgress;pingProgress`
-
-* __testState__ is an integer between -1 and 5
+* __testState__: an integer between -1 and 5
     * `-1` = Test not started yet
     * `0` = Test starting
     * `1` = Download test in progress
@@ -135,30 +130,29 @@ format:
     * `3` = Upload test in progress
     * `4` = Test finished
     * `5` = Test aborted
-* __dlStatus__ is either
+* __dlStatus__: either
     * Empty string (not started or aborted)
     * Download speed in Megabit/s as a number with 2 decimals
     * The string "Fail" (test failed)
-* __ulStatus__ is either
+* __ulStatus__: either
     * Empty string (not started or aborted)
     * Upload speed in Megabit/s as a number with 2 decimals
     * The string "Fail" (test failed)
-* __pingStatus__ is either
+* __pingStatus__: either
     * Empty string (not started or aborted)
     * Estimated ping in milliseconds as a number with 2 decimals
     * The string "Fail" (test failed)
-* __clientIp__ is either
+* __clientIp__: either
     * Empty string (not fetched yet or failed)
-    * The client's IP address as a string
-* __jitterStatus__ is either
+    * The client's IP address as a string (with ISP info if enabled)
+* __jitterStatus__: either
     * Empty string (not started or aborted)
     * Estimated jitter in milliseconds as a number with 2 decimals (lower = stable connection)
     * The string "Fail" (test failed)
 * __dlProgress__: the progress of the download test as a number between 0 and 1
 * __ulProgress__: the progress of the upload test as a number between 0 and 1
 * __pingProgress__: the progress of the ping+jitter test as a number between 0 and 1
-
-Note: clientIp appears before jitterStatus. This is not a mistake, it's to keep the js file compatible with older pages from before the jitter test was introduced.
+* __testId__: when telemetry is active, this is the ID of the test in the database. This string is null until the test is finished (testState 4), or if telemetry encounters an error. This ID is used for results sharing
 
 ### Starting the test
 To start the test with the default settings, which is usually the best choice, send the start command to the worker:
@@ -183,15 +177,17 @@ w.postMessage('start '+JSON.stringify(params))
 ```
 
 #### Test parameters
-* __time_dl__: How long the download test should be in seconds. The test will continue regardless of this limit if the speed is still 0.00 when the limit is reached.
+* __time_dl_max__: Maximum duration of the download test in seconds. If auto duration is disabled, this is used as the duration of the test.
     * Default: `15`
     * Recommended: `>=5`
-* __time_ul__: How long the upload test should be in seconds. The test will continue regardless of this limit if the speed is still 0.00 when the limit is reached.
+* __time_ul_max__: Maximum duration of the upload test in seconds. If auto duration is disabled, this is used as the duration of the test.
     * Default: `15`
     * Recommended: `>=10`
+* __time_auto__: Automatically determine the duration of the download and upload tests, making them faster on faster connections, to avoid wasting data.
+    * Default: `true`
 * __count_ping__: How many pings to perform in the ping test
-    * Default: `35`
-    * Recommended: `>=20`
+    * Default: `10`
+    * Recommended: `>=3, <30`
 * __url_dl__: path to garbage.php or a large file to use for the download test.
     * Default: `garbage.php`
     * __Important:__ path is relative to js file
@@ -204,6 +200,10 @@ w.postMessage('start '+JSON.stringify(params))
 * __url_getIp__: path to getIP.php or replacement
     * Default: `getIP.php`
     * __Important:__ path is relative to js file
+* __url_telemetry__: path to telemetry.php or replacement
+    * Default: `telemetry/telemetry.php`
+    * __Important:__ path is relative to js file
+	* __Note:__ you can ignore this parameter if you're not using the telemetry
 
 #### Advanced test parameters
 * __test_order__: the order in which tests will be performed. Each character represents an operation:
@@ -225,11 +225,11 @@ w.postMessage('start '+JSON.stringify(params))
 * __enable_quirks__: enables browser-specific optimizations. These optimizations override some of the default settings. They do not override settings that are explicitly set.
     * Default: `true`
 * __garbagePhp_chunkSize__: size of chunks sent by garbage.php in megabytes
-    * Default: `20`
+    * Default: `100`
     * Recommended: `>=10`
-    * Maximum: `100`
+    * Maximum: `1024`
 * __xhr_dlMultistream__: how many streams should be opened for the download test
-    * Default: `10`
+    * Default: `6`
     * Recommended: `>=3`
     * Default override: 3 on Edge if enable_quirks is true
     * Default override: 5 on Chromium-based if enable_quirks is true
@@ -258,6 +258,7 @@ w.postMessage('start '+JSON.stringify(params))
     * Recommended: `>=1`
 * __ping_allowPerformanceApi__: toggles use of Performance API to improve accuracy of Ping/Jitter test on browsers that support it.
 	* Default: `true`
+	* Default override: `false` on Firefox because its performance API implementation is inaccurate
 * __useMebibits__: use mebibits/s instead of megabits/s for the speeds
 	* Default: `false`
 * __overheadCompensationFactor__: compensation for HTTP and network overhead. Default value assumes typical MTUs used over the Internet. You might want to change this if you're using this in your internal network with different MTUs, or if you're using IPv6 instead of IPv4.
@@ -269,7 +270,13 @@ w.postMessage('start '+JSON.stringify(params))
     * `1514 / 1460`: TCP+IPv4+ETH, ignoring HTTP overhead
     * `1514 / 1440`: TCP+IPv6+ETH, ignoring HTTP overhead
     * `1`: ignore overheads. This measures the speed at which you actually download and upload files rather than the raw connection speed
-
+* __telemetry_level__: The type of telemetry to use. See the telemetry section for more info about this
+	* Default: `none`
+	* `basic`: send results only
+	* `full`: send results and timing information, even for aborted tests
+	* `debug`: same as full but also sends debug information. Not recommended.
+* __telemetry_extra__: Extra data that you want to be passed to the telemetry. This is a string field, if you want to pass an object, make sure you use ``JSON.stringify``. This string will be added to the database entry for this test.
+	
 ### Aborting the test prematurely
 The test can be aborted at any time by sending an abort command to the worker:
 
@@ -303,11 +310,12 @@ It is important here to turn off compression, and generate incompressible data.
 A symlink to `/dev/urandom` is also ok.
 
 #### Replacement for `empty.php`
-Your replacement must simply respond with a HTTP code 200 and send nothing else. You may want to send additional headers to disable caching. The test assumes that Connection:keep-alive is sent by the server.
+Your replacement must simply respond with a HTTP code 200 and send nothing else. You may want to send additional headers to disable caching. The test assumes that Connection:keep-alive is sent by the server.  
+An empty file can be used for this.
 
 #### Replacement for `getIP.php`
-Your replacement must simply respond with the client's IP as plaintext. Nothing fancy.  
-If you want, you can also accept the `isp=true` parameter and also include the ISP info.
+Your replacement can simply respond with the client's IP as plaintext or do something more fancy.
+If you want, you can also accept the `isp=true` parameter and also include the ISP info. In this case, return a JSON string containing a string called `processedString` with the text that you want to be displayed in the IP address field, and an object called `rawIspInfo` containing whatever you want (will be included in telemetry if enabled).
 
 #### JS
 You need to start the test with your replacements like this:
@@ -316,31 +324,33 @@ You need to start the test with your replacements like this:
 w.postMessage('start {"url_dl": "newGarbageURL", "url_ul": "newEmptyURL", "url_ping": "newEmptyURL", "url_getIp": "newIpURL"}')
 ```
 ## Telemetry
-Telemetry currently requires PHP and either MySQL, PostgreSQL or SQLite. Alternatively, it is possible to save to a CSV file.
+Telemetry currently requires PHP and either MySQL, PostgreSQL or SQLite.
 To set up the telemetry, we need to do 4 things:
-* copy `telemetry.php` and `telemetry_settings.php`
-* edit `telemetry_settings.php` to add your database or CSV settings
+* copy the `telemetry` folder
+* edit `telemetry_settings.php` to add your database settings
 * create the database
 * enable telemetry
 
 ### Creating the database
 This step is only for MySQL and PostgreSQL.  
-Log into your database using phpMyAdmin or a similar software and import the appropriate sql file into an empty database. For MySQL databases use `telemetry_mysql.sql` and for PostgreSQL databases use `telemetry_postgesql.sql`.
+Log into your database using phpMyAdmin or a similar software and import the appropriate sql file into an empty database. For MySQL databases use `telemetry_mysql.sql` and for PostgreSQL databases use `telemetry_postgesql.sql`. They're inside the `telemetry` folder. You can delete the files afterwards.
 If you see a table called `speedtest_users`, empty, you did it right.
 
 ### Configuring `telemetry.php`
-Open telemetry_settings.php with notepad or a similar text editor.
-Set your preferred database, ``$db_type="mysql";``, ``$db_type="sqlite";``, ``$db_type="postgresql";`` or or ``$db_type="csv";``
+Open `telemetry_settings.php` with notepad or a similar text editor.
+Set your preferred database, ``$db_type="mysql";``, ``$db_type="sqlite";`` or ``$db_type="postgresql";``
+
 If you choose to use Sqlite3, you must set the path to your database file:
 ```php
-$Sqlite_db_file = "../telemetry.sql";
+$Sqlite_db_file = "../../telemetry.sql";
 ```
+Sqlite doesn't require any additional configuration.
 
 If you choose to use MySQL, you must also add your database credentials:
 ```php
 $MySql_username="USERNAME"; //your database username
 $MySql_password="PASSWORD"; //your database password
-$MySql_hostname="DB_HOSTNAME"; //database address, usually localhost\
+$MySql_hostname="DB_HOSTNAME"; //database address, usually localhost
 $MySql_databasename="DB_NAME"; //the name of the database where you loaded telemetry_mysql.sql
 ```
 
@@ -352,29 +362,43 @@ $PostgreSql_hostname="DB_HOSTNAME"; //database address, usually localhost
 $PostgreSql_databasename="DB_NAME"; //the name of the database where you loaded telemetry_postgresql.sql
 ```
 
-If you choose to use a CSV file, you must set the Csv_File and timezone variables.
-```php
-$Csv_File="myReportFile.csv";
-$timezone='Europe/Paris';
-```
-__Note__: CSV currently only supports basic telemetry, the log will not be saved
-
 ### Enabling telemetry
 Edit your test page; where you start the worker, you need to specify the `telemetry_level`.  
 There are 3 levels:
 * `none`: telemetry is disabled (default)
-* `basic`: telemetry collects IP, User Agent, Preferred language, Test results
-* `full`: same as above, but also collects a log (10-150 Kb each, not recommended)
+* `basic`: telemetry collects IP, ISP info, User Agent, Preferred language, Test results
+* `full`: in addition to the basic telemetry, timing information is also collected so you know how long each part of the test took
+* `debug`: same as full, but also collects a debug log (10-150 Kb each, not recommended unless you're developing the speedtest)
 
 Example:
 ```js
 w.postMessage('start {"telemetry_level":"basic"}')
 ```
 
-Also, see example-telemetry.html
+You can use example-telemetryEnabled.html and example-telemetry-resultSharing.html as starting points.
+
+### Results sharing
+This feature generates an image that can be share by the user containing the download, upload, ping, jitter and ISP (if enabled).
+
+To use this feature, copy the `results` folder. You can customize the style of the generated image by editing the settings in `results/index.php`.
+
+This feature requires Telemetry to be enabled, and FreeType2 must be installed in PHP (if not already be installed by your distro).
+
+__Important:__ This feature relies on PHP functions `imagefttext` and `imageftbbox` that are well known for being problematic. The most common problem is that they can't find the font files and therefore nothing is drawn. This problem is metioned [here](http://php.net/manual/en/function.imagefttext.php) and was experienced by a lot of users.
+
+#### Obfuscated Test IDs
+By default, the telemetry generates a progressive ID for each test. Even if no sensitive information is leaked, you might not want users to be able to guess other test IDs. To avoid this, you can turn on ID obfuscation, which turns IDs into a reversible hash, much like YouTube video IDs.
+
+To enable this feature, edit `telemetry_settings.php` and set `enable_id_obfuscation` to true.
+
+From now on, all test IDs will be obfuscated using a unique salt. The IDs in the database are still progressive, but users will only know their obfuscated versions and won't be able to easily guess other IDs.
+
+__Important:__ Make sure PHP is allowed to write to the `telemetry` folder. The salt will be stored in a file called `idObfuscation_salt.php`. This file is like a private key, don't lose it or you won't be able to deobfuscate IDs anymore!
 
 ### Seeing the results
-At the moment there is no front-end to see the telemetry data; you can connect to the database and see the collected results in the `speedtest_users` table.
+A basic front-end for visualizing and searching tests by ID is available in `telemetry/stats.php`.
+
+A login is required to access the interface. __Important__: change the default password in `telemetry_settings.php`.
 
 ## Troubleshooting
 These are the most common issues reported by users, and how to fix them. If you still need help, contact me at [info@fdossena.com](mailto:info@fdossena.com).
@@ -399,6 +423,42 @@ Make sure your server is sending the ```Connection:keep-alive``` header
 #### The server is behind a load balancer, proxy, etc. and I get the wrong IP address
 Edit getIP.php and replace lines 5-13 with what is more appropriate in your scenario.  
 Example: ```$ip = $_SERVER['HTTP_X_FORWARDED_FOR'];```
+
+#### The results sharing just generates a blank image
+If the image doesn't display and the browser displays a broken image icon, FreeType2 is not installed or configured properly.  
+If the image is blank, this usually happens because PHP can't find the font files inside the `results` folder. You can fix your PHP config or edit `results/index.php` and use absolute paths for the fonts. This is a [known issue with PHP](http://php.net/manual/en/function.imagefttext.php) and no real solution is known.
+
+#### My server is behind Cloudflare and I can't reach full speed on some of the tests
+This is not a speedtest related issue, as it can be replicated in virtually any HTTP file upload/download.  
+Go to your domain's DNS settings and change "DNS and HTTP proxy (CDN)" to "DNS only", and wait for the settings to be applied (can take a few minutes).
+
+#### On Windows Server, using IIS, the upload test doesn't work, CORS errors are visible in the console
+This is a configuration issue. Make a file called web.config in wwwroot and adapt the following code:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <system.webServer>
+    <cors enabled="true" failUnlistedOrigins="false"> 
+      <add origin="*"> 
+        <allowHeaders allowAllRequestedHeaders="true" />
+        <allowMethods> 
+          <add method="GET" /> 
+          <add method="POST" /> 
+          <add method="PUT" /> 
+          <add method="DELETE" /> 
+          <add method="OPTIONS" /> 
+        </allowMethods> 
+        <exposeHeaders>
+        </exposeHeaders> 
+      </add>
+    </cors> 
+  </system.webServer> 
+</configuration>
+```
+
+#### ID obfuscation doesn't work (incorrect output, blank results image)
+ID obfuscation only works on 64 bit PHP (requires PHP_INT_SIZE to be 8).  
+Note that older versions of PHP 5 on Windows use PHP_INT_SIZE of 4, even if they're 64 bit. If you're in this situation, update your PHP install.
 
 ## Known bugs and limitations
 ### General
