@@ -2,14 +2,14 @@
 session_start();
 error_reporting(0);
 header('Content-Type: text/html; charset=utf-8');
-header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
-header("Cache-Control: post-check=0, pre-check=0", false);
-header("Pragma: no-cache");
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0, s-maxage=0');
+header('Cache-Control: post-check=0, pre-check=0', false);
+header('Pragma: no-cache');
 ?>
 <!DOCTYPE html>
 <html>
 <head>
-<title>HTML5 Speedtest - Stats</title>
+<title>LibreSpeed - Stats</title>
 <style type="text/css">
 	html,body{
 		margin:0;
@@ -54,7 +54,7 @@ header("Pragma: no-cache");
 </style>
 </head>
 <body>
-<h1>HTML5 Speedtest - Stats</h1>
+<h1>LibreSpeed - Stats</h1>
 <?php
 include_once("telemetry_settings.php");
 require "idObfuscation.php";
@@ -69,7 +69,7 @@ if($stats_password=="PASSWORD"){
 	}else{
 		$conn=null;
 		if($db_type=="mysql"){
-			$conn = new mysqli($MySql_hostname, $MySql_username, $MySql_password, $MySql_databasename);
+			$conn = new mysqli($MySql_hostname, $MySql_username, $MySql_password, $MySql_databasename, $MySql_port);
 		}else if($db_type=="sqlite"){
 			$conn = new PDO("sqlite:$Sqlite_db_file");
 		} else if($db_type=="postgresql"){
@@ -110,7 +110,7 @@ if($stats_password=="PASSWORD"){
 				$q->store_result();
 				$q->bind_result($id,$timestamp,$ip,$ispinfo,$ua,$lang,$dl,$ul,$ping,$jitter,$log,$extra);
 			} else if($db_type=="sqlite"||$db_type=="postgresql"){
-				$q=$conn->prepare("select id,timestamp,ip,ispinfo,ua,lang,dl,ul,ping,jitter,log,extra from speedtest_users order by timestamp desc limit 0,100");
+				$q=$conn->prepare("select id,timestamp,ip,ispinfo,ua,lang,dl,ul,ping,jitter,log,extra from speedtest_users order by timestamp desc limit 100");
 				$q->execute();
 			}else die();
 		}
@@ -135,7 +135,7 @@ if($stats_password=="PASSWORD"){
 			}else die();
 	?>
 		<table>
-			<tr><th>Test ID</th><td><?=htmlspecialchars(($enable_id_obfuscation?obfuscateId($id):$id), ENT_HTML5, 'UTF-8') ?></td></tr>
+			<tr><th>Test ID</th><td><?=htmlspecialchars(($enable_id_obfuscation?(obfuscateId($id)." (deobfuscated: ".$id.")"):$id), ENT_HTML5, 'UTF-8') ?></td></tr>
 			<tr><th>Date and time</th><td><?=htmlspecialchars($timestamp, ENT_HTML5, 'UTF-8') ?></td></tr>
 			<tr><th>IP and ISP Info</th><td><?=$ip ?><br/><?=htmlspecialchars($ispinfo, ENT_HTML5, 'UTF-8') ?></td></tr>
 			<tr><th>User agent and locale</th><td><?=$ua ?><br/><?=htmlspecialchars($lang, ENT_HTML5, 'UTF-8') ?></td></tr>
